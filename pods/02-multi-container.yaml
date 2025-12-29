@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: Pod
 metadata:
-  name: nginx+almalinux
+  name: nginx-almalinux
   namespace: roboshop
 spec:
   containers:
