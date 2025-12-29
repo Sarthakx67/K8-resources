@@ -32,3 +32,59 @@ spec:
 # - Changing spec.template (e.g., image) triggers a rolling update by default.
 # - Ensure selector.matchLabels exactly equals template.metadata.labels; mismatch prevents the Deployment from managing the Pods.
 # - For production, add resources.requests/limits and imagePullPolicy, and pin the image tag.
+
+
+# Important kubectl commands (run with -n roboshop if using that namespace):
+
+# - Apply/update manifest:
+#   kubectl apply -f d:\kubernetes\k8-resources\sets\02-deployment.yaml -n roboshop
+# - Describe deployment:
+#   kubectl describe deployment nginx-deployment -n roboshop
+# - List deployments:
+#   kubectl get deployments -n roboshop
+# - List pods for this app:
+#   kubectl get pods -l app=nginx -n roboshop
+# - Delete a pod (Deployment will recreate):
+#   kubectl delete pod <pod-name> -n roboshop
+# - Delete pods by label:
+#   kubectl delete pods -l componet=frontend -n roboshop
+# - Trigger rolling restart:
+#   kubectl rollout restart deployment/nginx-deployment -n roboshop
+# - Check rollout status:
+#   kubectl rollout status deployment/nginx-deployment -n roboshop
+# - View logs (follow):
+#   kubectl logs -f <pod-name> -n roboshop
+# - Port-forward to deployment:
+#   kubectl port-forward deployment/nginx-deployment 8080:80 -n roboshop
+# - Delete & recreate deployment (if selector changed):
+#   kubectl delete deployment nginx-deployment -n roboshop && kubectl apply -f d:\kubernetes\k8-resources\sets\02-deployment.yaml -n roboshop
+# ...existing code...
+# Notes:
+# - The Deployment creates a ReplicaSet which in turn creates Pods using the template above.
+# - Changing spec.template (e.g., image) triggers a rolling update by default.
+# - Ensure selector.matchLabels exactly equals template.metadata.labels; mismatch prevents the Deployment from managing the Pods.
+# - For production, add resources.requests/limits and imagePullPolicy, and pin the image tag.
+#
+# Important kubectl commands (run with -n roboshop if using that namespace):
+# - Apply/update manifest:
+#   kubectl apply -f d:\kubernetes\k8-resources\sets\02-deployment.yaml -n roboshop
+# - Describe deployment:
+#   kubectl describe deployment nginx-deployment -n roboshop
+# - List deployments:
+#   kubectl get deployments -n roboshop
+# - List pods for this app:
+#   kubectl get pods -l app=nginx -n roboshop
+# - Delete a pod (Deployment will recreate):
+#   kubectl delete pod <pod-name> -n roboshop
+# - Delete pods by label:
+#   kubectl delete pods -l componet=frontend -n roboshop
+# - Trigger rolling restart:
+#   kubectl rollout restart deployment/nginx-deployment -n roboshop
+# - Check rollout status:
+#   kubectl rollout status deployment/nginx-deployment -n roboshop
+# - View logs (follow):
+#   kubectl logs -f <pod-name> -n roboshop
+# - Port-forward to deployment:
+#   kubectl port-forward deployment/nginx-deployment 8080:80 -n roboshop
+# - Delete & recreate deployment (if selector changed):
+#   kubectl delete deployment nginx-deployment -n roboshop && kubectl apply -f d:\kubernetes\k8-resources\sets\02-deployment.yaml -n roboshop
