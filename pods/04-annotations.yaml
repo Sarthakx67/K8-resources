@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: annotations
+  labels:
+    production: dev
+    app: nginx
+  annotations:
+    com.project.author: sarthak
+    com.project.name: nginx-deployment
+spec:
+  containers:
+  - name: nginx-deployment
+    image: nginx
+    ports:
+    - containerPort: 80
