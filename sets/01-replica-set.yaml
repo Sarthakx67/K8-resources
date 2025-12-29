@@ -1,3 +1,4 @@
+# replica set is only here to maintain the replica , it will not update application on version chnage
 apiVersion: apps/v1
 kind: ReplicaSet
 metadata:
