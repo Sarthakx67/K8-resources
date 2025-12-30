@@ -1,0 +1,71 @@
+# -------------------------------
+# DAEMONSET: Fluentd Log Collector
+# -------------------------------
+apiVersion: apps/v1
+kind: DaemonSet
+# DaemonSet ensures:
+# → Exactly ONE Fluentd pod runs on EACH worker node
+# → When a new node joins → Fluentd pod is auto-created
+# → When a node is removed → Fluentd pod is auto-deleted
+
+metadata:
+  name: fluentd
+
+  # kube-system namespace is used for
+  # cluster-level system components
+  namespace: kube-system
+
+  labels:
+    # Standard label used for Kubernetes logging components
+    k8s-app: fluentd-logging
+    version: v1
+
+spec:
+  # Selector tells DaemonSet which Pods it owns
+  selector:
+    matchLabels:
+      k8s-app: fluentd-logging
+      version: v1
+
+  # Pod template (what actually runs on each node)
+  template:
+    metadata:
+      labels:
+        # These labels MUST match selector.matchLabels
+        k8s-app: fluentd-logging
+        version: v1
+
+    spec:
+      containers:
+      - name: fluentd
+
+        # Fluentd image with Elasticsearch plugin pre-installed
+        image: quay.io/fluentd_elasticsearch/fluentd:v2.5.2
+
+        # Resource management to avoid node overload
+        resources:
+          limits:
+            # Max memory Fluentd can consume
+            memory: 200Mi
+          requests:
+            # Guaranteed minimum CPU
+            cpu: 100m
+            # Guaranteed minimum memory
+            memory: 200Mi
+
+        volumeMounts:
+        # Mount node's /var/log directory inside the container
+        - name: varlog
+          # Inside container, logs will appear at:
+          # /var/log/containers/
+          # /var/log/pods/
+          mountPath: /var/log
+
+      volumes:
+      # HostPath volume gives pod access to node filesystem
+      - name: varlog
+        hostPath:
+          # IMPORTANT:
+          # This gives access to NODE's /var/log directory
+          # Not the container's filesystem
+          path: /var/log

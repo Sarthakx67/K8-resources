@@ -1,0 +1,109 @@
+# -------------------------------
+# PERSISTENT VOLUME (Static EBS)
+# -------------------------------
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  # Name of the PV (cluster-scoped resource)
+  name: ebs-static
+
+spec:
+  # Empty storageClassName means:
+  # ❗ NO dynamic provisioning
+  # ❗ This PV must be manually created and manually claimed
+  storageClassName: ""
+
+  # Access mode:
+  # ReadWriteOnce = can be mounted as read-write
+  # by ONLY ONE node at a time
+  accessModes:
+  - ReadWriteOnce
+
+  # AWS EBS volume details
+  awsElasticBlockStore:
+    # Filesystem that already exists (or will be created)
+    fsType: ext4
+
+    # Exact EBS volume ID from AWS
+    # ❗ Volume must already exist
+    # ❗ Must be in SAME AZ as worker node
+    volumeID: vol-0e6a3a85bf408fd49
+
+  # Total storage capacity of this PV
+  capacity:
+    storage: 20Gi
+---
+# -------------------------------
+# PERSISTENT VOLUME CLAIM (PVC)
+# -------------------------------
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  # PVC name (namespace-scoped)
+  name: ebs-static-pvc
+
+spec:
+  # Must match PV storageClassName
+  # Empty here → matches static PV
+  storageClassName: ""
+
+  accessModes:
+    - ReadWriteOnce
+
+  resources:
+    requests:
+      # PVC is requesting ONLY 3Gi
+      # PV has 20Gi → PVC can bind successfully
+      storage: 3Gi
+---
+# -------------------------------
+# DEPLOYMENT USING THE PVC
+# -------------------------------
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-deployment
+
+  labels:
+    # These labels belong to the Deployment object
+    app: nginx
+
+spec:
+  replicas: 1
+
+  selector:
+    matchLabels:
+      # Deployment will manage ONLY pods
+      # having ALL these labels
+      app: nginx
+      project: roboshop
+      component: frontend
+
+  # Pod template
+  template:
+    metadata:
+      labels:
+        # Pod labels MUST match selector
+        app: nginx
+        project: roboshop
+        component: frontend
+
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:1.14.2
+
+        ports:
+        - containerPort: 80
+
+        volumeMounts:
+        # Mount PVC-backed volume inside container
+        - mountPath: "/usr/share/nginx/html"
+          name: nginx-html
+
+      volumes:
+      - name: nginx-html
+        # Pod is using a PersistentVolumeClaim
+        persistentVolumeClaim:
+          # This PVC will bind to the static PV
+          claimName: ebs-static-pvc

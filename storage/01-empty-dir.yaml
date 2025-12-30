@@ -1,0 +1,136 @@
+# -------------------------------
+# CONFIGMAP: Filebeat Configuration
+# -------------------------------
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  # Name of the ConfigMap
+  # This will later be mounted inside the Filebeat container
+  name: filebeat-configmap
+data:
+  # filebeat.yml is the actual Filebeat configuration file
+  filebeat.yml: |
+    filebeat:
+      config:
+        modules:
+          # Path where Filebeat module configs live inside the container
+          path: /usr/share/filebeat/modules.d/*.yml
+          reload:
+            # Enables dynamic reloading of module configs
+            # If module config changes, Filebeat reloads without restart
+            enabled: true
+
+      # Enabling the nginx module
+      modules:
+      - module: nginx
+        # Nginx access log configuration
+        access:
+          # Filebeat will read nginx access logs from this path
+          # The * allows rotated logs as well
+          var.paths: ["/var/log/nginx/access.log*"]
+
+        # Nginx error log configuration
+        error:
+          # Filebeat will read nginx error logs from this path
+          var.paths: ["/var/log/nginx/error.log*"]
+
+    # Output configuration
+    output:
+      elasticsearch:
+        # Elasticsearch service endpoint
+        # "elasticsearch" must be a Kubernetes Service name
+        # running in the same namespace
+        hosts: ["elasticsearch:9200"]
+
+---
+# -------------------------------
+# DEPLOYMENT: Nginx + Filebeat Sidecar
+# -------------------------------
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  # Deployment name
+  name: nginx
+  labels:
+    # Label used by selectors (Service / Deployment)
+    app: nginx
+
+spec:
+  # Number of pod replicas
+  replicas: 1
+
+  # Selector tells the Deployment which Pods it owns
+  selector:
+    matchLabels:
+      app: nginx
+
+  # Pod template (actual pod definition)
+  template:
+    metadata:
+      name: nginx
+      labels:
+        # Must EXACTLY match selector.matchLabels
+        app: nginx
+
+    spec:
+      containers:
+
+        # -------------------------------
+        # MAIN CONTAINER: Nginx
+        # -------------------------------
+        - name: nginx
+          image: nginx
+
+          # Expose port 80 inside the pod
+          ports:
+            - containerPort: 80
+
+          volumeMounts:
+            # Mount shared volume where nginx writes logs
+            - name: nginx-logs
+              # IMPORTANT:
+              # This path MUST match the log paths
+              # used by Filebeat in filebeat.yml
+              mountPath: /var/log/nginx/
+
+        # -------------------------------
+        # SIDECAR CONTAINER: Filebeat
+        # -------------------------------
+        - name: filebeat-sidecar
+          image: docker.elastic.co/beats/filebeat:7.5.0
+
+          volumeMounts:
+            # Mount the SAME log directory
+            # so Filebeat can read nginx logs
+            - name: nginx-logs
+              mountPath: /var/log/nginx/
+
+            # Mount filebeat.yml from ConfigMap
+            - name: filebeat-config
+              # Filebeat expects config at this exact path
+              mountPath: /usr/share/filebeat/filebeat.yml
+
+              # subPath ensures ONLY filebeat.yml
+              # is mounted (not the whole directory)
+              subPath: filebeat.yml
+
+      # -------------------------------
+      # VOLUMES (Shared Storage)
+      # -------------------------------
+      volumes:
+        # Shared volume between nginx and Filebeat
+        - name: nginx-logs
+          # emptyDir means:
+          # - Volume exists only for Pod lifetime
+          # - Shared between containers in the Pod
+          emptyDir: {}
+
+        # Volume sourced from ConfigMap
+        - name: filebeat-config
+          configMap:
+            name: filebeat-configmap
+            items:
+              # Key from ConfigMap
+              - key: filebeat.yml
+                # File name inside the container
+                path: filebeat.yml
