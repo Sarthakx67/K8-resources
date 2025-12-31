@@ -1,0 +1,118 @@
+# -------------------------------
+# STORAGECLASS (EBS - Block Storage)
+# -------------------------------
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  # Name used by PVCs to request this class
+  name: ebs-sc
+
+# AWS EBS CSI driver
+# This driver dynamically creates EBS volumes
+provisioner: ebs.csi.aws.com
+
+# WaitForFirstConsumer means:
+# - Do NOT create the EBS volume immediately
+# - Wait until a Pod is scheduled
+# - Create the volume in the SAME AZ as the Pod
+# This prevents cross-AZ attachment failures
+volumeBindingMode: WaitForFirstConsumer
+
+parameters:
+  # Filesystem type to format the EBS volume
+  # xfs is preferred for performance and large files
+  csi.storage.k8s.io/fstype: xfs
+
+  # EBS volume type
+  # io1 = Provisioned IOPS SSD (high performance, expensive)
+  type: io1
+
+  # Number of IOPS per GB
+  # 4Gi * 50 = 200 IOPS total
+  iopsPerGB: "50"
+
+  # Encrypt the EBS volume at rest
+  encrypted: "true"
+
+---
+# -------------------------------
+# PERSISTENT VOLUME CLAIM (PVC)
+# -------------------------------
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  # Name referenced by Pods
+  name: ebs-dynamic-pvc
+
+spec:
+  # StorageClass to use for dynamic provisioning
+  storageClassName: "ebs-sc"
+
+  # Access mode:
+  # ReadWriteOnce means:
+  # - Volume can be mounted by only ONE node at a time
+  # This matches EBS limitations
+  accessModes:
+    - ReadWriteOnce
+
+  resources:
+    requests:
+      # Logical storage request
+      storage: 4Gi
+
+---
+# -------------------------------
+# DEPLOYMENT
+# -------------------------------
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-deployment
+
+  # Labels on Deployment object (not pods)
+  labels:
+    app: nginx
+
+spec:
+  # Number of replicas requested
+  replicas: 3
+
+  # Deployment manages ONLY pods with these labels
+  selector:
+    matchLabels:
+      app: nginx
+      project: roboshop
+      component: frontend
+
+  # Pod template
+  template:
+    metadata:
+      # MUST match selector.matchLabels
+      labels:
+        app: nginx
+        project: roboshop
+        component: frontend
+
+    spec:
+      containers:
+      - name: nginx
+
+        # Nginx container image
+        image: nginx
+
+        ports:
+        - containerPort: 80
+
+        # Mounting the PVC inside the container
+        volumeMounts:
+        - mountPath: "/usr/share/nginx/html"
+          name: nginx-html
+
+      # Volume definition at pod level
+      volumes:
+      - name: nginx-html
+
+        # This tells Kubernetes:
+        # "Attach the EBS volume created for this PVC"
+        persistentVolumeClaim:
+          claimName: ebs-dynamic-pvc

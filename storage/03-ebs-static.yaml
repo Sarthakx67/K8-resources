@@ -1,6 +1,9 @@
 # -------------------------------
 # PERSISTENT VOLUME (Static EBS)
 # -------------------------------
+
+# this will create pv to attach the pod to the ebs we created in cloud
+
 apiVersion: v1
 kind: PersistentVolume
 metadata:
@@ -36,6 +39,9 @@ spec:
 # -------------------------------
 # PERSISTENT VOLUME CLAIM (PVC)
 # -------------------------------
+
+# pv claim will be used to cliam a specific amount of storage from pv we created earlier
+
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:

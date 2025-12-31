@@ -1,0 +1,130 @@
+# -------------------------------
+# PERSISTENT VOLUME (STATIC EFS)
+# -------------------------------
+# This PV represents an EXISTING EFS filesystem.
+# Kubernetes will NOT create or delete EFS here.
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  # Name of the PV (cluster-wide object)
+  name: efs-static-pv
+
+spec:
+  capacity:
+    # Logical size.
+    # EFS is elastic, so this is only for Kubernetes matching.
+    storage: 5Gi
+
+  # VolumeMode Filesystem means:
+  # The volume will be mounted as a directory, not a raw block device.
+  volumeMode: Filesystem
+
+  # Access mode requested.
+  # ⚠️ LOGIC ISSUE (explained later):
+  # EFS supports ReadWriteMany, but you are restricting it to RWO.
+  accessModes:
+    - ReadWriteOnce
+
+  # Empty storageClassName means:
+  # - This PV is NOT managed by any StorageClass
+  # - It is meant ONLY for static provisioning
+  storageClassName: ""
+
+  # Retain means:
+  # - If PVC is deleted, PV is NOT deleted
+  # - EFS filesystem and data remain intact
+  # This is correct for static + production storage
+  persistentVolumeReclaimPolicy: Retain
+
+  # CSI configuration
+  csi:
+    # AWS EFS CSI driver
+    driver: efs.csi.aws.com
+
+    # volumeHandle is the EFS filesystem ID
+    # Kubernetes will mount THIS exact EFS filesystem
+    volumeHandle: fs-0748939e00c6a516a
+
+---
+# -------------------------------
+# PERSISTENT VOLUME CLAIM (PVC)
+# -------------------------------
+# This PVC will bind ONLY to a matching static PV.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  # PVC name referenced by the Pod
+  name: efs-static-pvc
+
+spec:
+  # Access mode must EXACTLY match PV accessModes
+  accessModes:
+    - ReadWriteOnce
+
+  # Empty storageClassName is VERY IMPORTANT:
+  # - Tells Kubernetes: "Do NOT use dynamic provisioning"
+  # - Bind only to a statically created PV
+  storageClassName: ""
+
+  resources:
+    requests:
+      # Requested size must be <= PV capacity
+      storage: 5Gi
+
+---
+# -------------------------------
+# DEPLOYMENT
+# -------------------------------
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-deployment
+
+  # Labels on the Deployment object itself
+  labels:
+    app: nginx
+
+spec:
+  # Number of pods
+  replicas: 1
+
+  # Deployment will manage only pods with these labels
+  selector:
+    matchLabels:
+      app: nginx
+      project: roboshop
+      component: frontend
+
+  # Pod template
+  template:
+    metadata:
+      # MUST match selector.matchLabels
+      labels:
+        app: nginx
+        project: roboshop
+        component: frontend
+
+    spec:
+      containers:
+      - name: nginx
+
+        # Nginx container image
+        image: nginx
+
+        ports:
+        - containerPort: 80
+
+        # Mounting the PVC into the container
+        volumeMounts:
+        - mountPath: "/usr/share/nginx/html"
+          # This directory is backed by EFS storage
+          name: nginx-html
+
+      # Volume declaration at pod level
+      volumes:
+      - name: nginx-html
+
+        # This tells Kubernetes:
+        # "Attach the storage provided by this PVC"
+        persistentVolumeClaim:
+          claimName: efs-static-pvc

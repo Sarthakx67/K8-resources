@@ -1,0 +1,138 @@
+# -------------------------------
+# STORAGECLASS
+# -------------------------------
+# This defines HOW Kubernetes should dynamically create storage.
+# No storage is created at this point.
+kind: StorageClass
+apiVersion: storage.k8s.io/v1
+metadata:
+  # Name of the StorageClass.
+  # PVCs will refer to this name.
+  name: efs-dynamic-roboshop-sc
+
+# This tells Kubernetes WHICH provisioner to use.
+# efs.csi.aws.com = AWS EFS CSI Driver
+# This driver knows how to talk to AWS EFS.
+provisioner: efs.csi.aws.com
+
+parameters:
+  # provisioningMode: efs-ap
+  # This means: use EFS Access Points for dynamic provisioning.
+  # Each PVC will get its OWN access point inside the same EFS filesystem.
+  provisioningMode: efs-ap
+
+  # fileSystemId of an EXISTING EFS filesystem.
+  # Kubernetes will NOT create EFS here.
+  # It will only create access points inside this EFS.
+  fileSystemId: fs-092d5cbc6e298fe0d
+
+  # Permissions for the directory created inside EFS.
+  # 700 = owner has full access, others have none.
+  directoryPerms: "700"
+
+  # Optional GID range.
+  # For each PVC, Kubernetes will pick a GID from this range.
+  # This helps isolate permissions between multiple PVCs.
+  gidRangeStart: "1000"
+  gidRangeEnd: "2000"
+
+  # Base directory inside EFS.
+  # All dynamic directories will be created under /roboshop
+  # Example:
+  # /roboshop/pvc-xxxx/
+  basePath: "/roboshop"
+
+---
+# -------------------------------
+# PERSISTENT VOLUME CLAIM (PVC)
+# -------------------------------
+# This is a REQUEST for storage.
+# This is where dynamic provisioning actually starts.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  # Name of the PVC.
+  # Pods will refer to this name.
+  name: efs-dynamic-pvc
+
+spec:
+  # Access mode requested.
+  # ⚠️ IMPORTANT:
+  # For EFS, this SHOULD be ReadWriteMany (RWX),
+  # because EFS supports multiple pods.
+  # ReadWriteOnce still works but is logically incorrect.
+  accessModes:
+    - ReadWriteOnce
+
+  # This tells Kubernetes:
+  # "Use THIS StorageClass to satisfy my request"
+  storageClassName: "efs-dynamic-roboshop-sc"
+
+  resources:
+    requests:
+      # Logical size request.
+      # EFS is elastic, so this is mostly for Kubernetes bookkeeping.
+      # Minimum storage request should be above 4Gi(GB)
+      storage: 5Gi
+
+---
+# -------------------------------
+# DEPLOYMENT
+# -------------------------------
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-deployment
+
+  # Labels on the Deployment object itself.
+  # Mostly used for organization, not traffic routing.
+  labels:
+    app: nginx
+
+spec:
+  # Number of pod replicas.
+  replicas: 1
+
+  # Selector tells the Deployment:
+  # "These are the pods I manage"
+  selector:
+    matchLabels:
+      app: nginx
+      project: roboshop
+      component: frontend
+
+  # Pod template (actual pod definition)
+  template:
+    metadata:
+      # These labels MUST match selector.matchLabels
+      # Otherwise Deployment will break.
+      labels:
+        app: nginx
+        project: roboshop
+        component: frontend
+
+    spec:
+      containers:
+      - name: nginx
+
+        # Nginx container image
+        image: nginx
+
+        ports:
+        - containerPort: 80
+
+        # Mounting the PVC into the container
+        volumeMounts:
+        - mountPath: "/usr/share/nginx/html"
+          # This path inside the container
+          # will now be backed by EFS storage
+          name: nginx-html
+
+      # Volumes section at pod level
+      volumes:
+      - name: nginx-html
+
+        # This tells Kubernetes:
+        # "Attach the storage requested by this PVC"
+        persistentVolumeClaim:
+          claimName: efs-dynamic-pvc
